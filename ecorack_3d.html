@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>EcoRack AI – Data Centre Control Room</title>
+    <style>
+        :root {
+            --bg: #050b16;
+            --pn: rgba(8, 24, 48, .85);
+            --ln: #1b4f86;
+            --ln2: #2d7fd0;
+            --tx: #dcebff;
+            --mu: #7fa0c4;
+            --cool: #22e07a;
+            --norm: #ffc533;
+            --high: #ff3347;
+            --wat: #2cc9ff;
+            color-scheme: dark;
+            box-sizing: border-box;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px)
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 50% -10%, #0d2a52, #050b16 70%) fixed;
+            color: var(--tx);
+            font: 14px/1.35 "Segoe UI", system-ui, sans-serif;
+            min-height: 100vh
+        }
+
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            align-items: center;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--ln);
+            background: linear-gradient(#0a2142, #07162b)
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: .4px;
+            color: #7fd0ff
+        }
+
+        h1 small {
+            font-size: 12px;
+            color: var(--mu);
+            font-weight: 400;
+            margin-left: 8px
+        }
+
+        .sp {
+            flex: 1
+        }
+
+        .chip {
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-weight: 700;
+            font-size: 12px;
+            background: var(--cool);
+            color: #03150c
+        }
+
+        .chip.high {
+            background: var(--high);
+            color: #fff;
+            animation: bl .5s infinite alternate
+        }
+
+        .chip.off {
+            background: #1a2d46;
+            color: var(--mu);
+            animation: none
+        }
+
+        @keyframes bl {
+            to {
+                opacity: .45
+            }
+        }
+
+        button,
+        input {
+            font: inherit;
+            font-size: 13px;
+            background: #0e2442;
+            color: var(--tx);
+            border: 1px solid var(--ln);
+            border-radius: 8px;
+            padding: 6px 10px
+        }
+
+        button {
+            cursor: pointer
+        }
+
+        button:hover {
+            border-color: var(--wat)
+        }
+
+        button.on {
+            background: var(--wat);
+            color: #00121c;
+            border-color: var(--wat)
+        }
+
+        button:focus-visible,
+        input:focus-visible {
+            outline: 2px solid var(--wat)
+        }
+
+        input[type=range] {
+            padding: 0;
+            accent-color: var(--wat);
+            width: 100%
+        }
+
+        input[type=number] {
+            width: 64px
+        }
+
+        main {
+            display: grid;
+            gap: 10px;
+            padding: 10px;
+            grid-template-columns: 1fr 340px;
+            grid-template-areas: "scene side" "tbl side" "hotspotPanel log" "insights log" "ops log" "chart log"
+        }
+
+        .pn {
+            background: var(--pn);
+            border: 1px solid var(--ln);
+            border-radius: 6px;
+            padding: 10px 12px;
+            position: relative;
+            transition: border-color .3s
+        }
+
+        .pn h2 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #8cc8ff;
+            border-bottom: 1px solid var(--ln);
+            padding-bottom: 5px
+        }
+
+        body.danger .pn {
+            border-color: #a31b2b
+        }
+
+        #scene {
+            grid-area: scene;
+            height: 540px;
+            padding: 0;
+            overflow: hidden
+        }
+
+        #c {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            cursor: grab
+        }
+
+        .tag {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            padding: 2px 7px;
+            border-radius: 5px;
+            border: 1px solid;
+            background: rgba(5, 14, 28, .82);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            cursor: pointer;
+            white-space: nowrap
+        }
+
+        #banner {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--high);
+            color: #fff;
+            font-weight: 700;
+            padding: 6px 16px;
+            border-radius: 99px;
+            display: none;
+            white-space: nowrap;
+            z-index: 3
+        }
+
+        #heatAlert {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(20, 0, 4, .88);
+            backdrop-filter: blur(5px)
+        }
+
+        #heatAlert.show {
+            display: flex;
+            animation: alertIn .25s ease-out
+        }
+
+        .heat-card {
+            width: min(760px, 96vw);
+            padding: clamp(24px, 6vw, 56px);
+            text-align: center;
+            border: 4px solid #ff3347;
+            border-radius: 20px;
+            background: linear-gradient(145deg, #3b0710, #140812);
+            box-shadow: 0 0 70px rgba(255, 51, 71, .65);
+            animation: alertPulse 1s infinite alternate
+        }
+
+        .heat-card h2 {
+            font-size: clamp(30px, 7vw, 64px);
+            line-height: 1.05;
+            margin: 0 0 18px;
+            color: #fff
+        }
+
+        .heat-card p {
+            font-size: clamp(18px, 3vw, 28px);
+            margin: 10px 0;
+            color: #ffe5e8
+        }
+
+        .heat-card strong {
+            color: #ff6877
+        }
+
+        .heat-card button {
+            margin-top: 20px;
+            padding: 14px 30px;
+            font-size: 20px;
+            font-weight: 800;
+            background: #ff3347;
+            color: #fff;
+            border: 0;
+            border-radius: 10px
+        }
+
+        @keyframes alertIn {
+            from {
+                opacity: 0;
+                transform: scale(.94)
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        @keyframes alertPulse {
+            to {
+                box-shadow: 0 0 95px rgba(255, 51, 71, .95)
+            }
+        }
+
+        #hint {
+            position: absolute;
+            left: 10px;
+            bottom: 8px;
+            font-size: 11px;
+            color: var(--mu)
+        }
+
+        #fx {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            box-shadow: inset 0 0 140px 40px var(--high);
+            opacity: 0;
+            z-index: 9
+        }
+
+        aside {
+            grid-area: side;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        .g2 {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            justify-content: space-around
+        }
+
+        .thermo {
+            width: 26px;
+            height: 150px;
+            border-radius: 13px;
+            background: #0a1a30;
+            border: 2px solid var(--ln2);
+            position: relative;
+            overflow: hidden
+        }
+
+        .thermo i {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transition: height .4s, background .4s
+        }
+
+        .big {
+            font-size: 38px;
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums
+        }
+
+        .ring {
+            width: 112px;
+            height: 112px;
+            border-radius: 50%;
+            background: conic-gradient(var(--wat) calc(var(--p)*1%), #0a1a30 0);
+            display: grid;
+            place-items: center
+        }
+
+        .ring b {
+            width: 86px;
+            height: 86px;
+            border-radius: 50%;
+            background: #071a33;
+            display: grid;
+            place-items: center;
+            font-size: 20px
+        }
+
+        .kv {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            color: var(--mu)
+        }
+
+        .kv b {
+            color: var(--tx);
+            font-variant-numeric: tabular-nums
+        }
+
+        #fanIc {
+            color: #52627a
+        }
+
+        #fanIc.spin {
+            color: var(--wat);
+            animation: sp .45s linear infinite
+        }
+
+        @keyframes sp {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .oled {
+            background: #000;
+            border: 2px solid #333;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font: 13px/1.45 ui-monospace, Consolas, monospace;
+            color: #7fe7ff;
+            height: 78px;
+            margin-bottom: 8px
+        }
+
+        .leds {
+            display: flex;
+            gap: 14px;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--mu)
+        }
+
+        .leds span {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px
+        }
+
+        .led {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #1b2536;
+            border: 1px solid #334
+        }
+
+        .led.g.on {
+            background: var(--cool);
+            box-shadow: 0 0 12px var(--cool)
+        }
+
+        .led.y.on {
+            background: var(--norm);
+            box-shadow: 0 0 12px var(--norm)
+        }
+
+        .led.r.on {
+            background: var(--high);
+            box-shadow: 0 0 12px var(--high)
+        }
+
+        .led.b.on {
+            background: #fff;
+            box-shadow: 0 0 12px #fff;
+            animation: bl .3s infinite alternate
+        }
+
+        .led.f.on {
+            background: var(--wat);
+            box-shadow: 0 0 12px var(--wat)
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--mu);
+            flex-wrap: wrap
+        }
+
+        #tbl {
+            grid-area: tbl;
+            overflow-x: auto
+        }
+
+        #hotspotPanel {
+            grid-area: hotspotPanel
+        }
+
+        #insights {
+            grid-area: insights
+        }
+
+        #ops {
+            grid-area: ops
+        }
+
+        #chart {
+            grid-area: chart
+        }
+
+        #log {
+            grid-area: log;
+            max-height: 290px;
+            overflow: auto
+        }
+
+        .kpis {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 8px;
+            margin-bottom: 8px
+        }
+
+        .kpi {
+            background: #071a33;
+            border: 1px solid var(--ln);
+            border-radius: 5px;
+            padding: 6px 10px;
+            color: var(--mu);
+            font-size: 12px
+        }
+
+        .kpi b {
+            display: block;
+            font-size: 20px;
+            color: var(--wat);
+            font-variant-numeric: tabular-nums
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+            min-width: 640px
+        }
+
+        th {
+            text-align: left;
+            color: #6fc3ff;
+            font-weight: 600;
+            padding: 5px 8px;
+            border-bottom: 1px solid var(--ln)
+        }
+
+        td {
+            padding: 5px 8px;
+            border-bottom: 1px solid #0e2948
+        }
+
+        tbody tr {
+            cursor: pointer
+        }
+
+        tbody tr:hover,
+        tr.sel {
+            background: #0e2c52
+        }
+
+        td em {
+            font-size: 10px;
+            color: var(--cool);
+            font-style: normal;
+            border: 1px solid var(--cool);
+            border-radius: 4px;
+            padding: 0 4px
+        }
+
+        .on {
+            color: var(--wat)
+        }
+
+        .bar {
+            display: inline-block;
+            width: 60px;
+            height: 7px;
+            background: #0a1a30;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-right: 5px;
+            overflow: hidden
+        }
+
+        .bar i {
+            display: block;
+            height: 100%;
+            background: #ff9a2c
+        }
+
+        #ch {
+            width: 100%;
+            height: 220px;
+            display: block
+        }
+
+        #hotspots {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+            gap: 9px
+        }
+
+        .hot-card {
+            padding: 12px;
+            border: 1px solid var(--ln);
+            border-radius: 8px;
+            background: #071a33;
+            cursor: pointer
+        }
+
+        .hot-card b {
+            display: block;
+            font-size: 19px
+        }
+
+        .hot-card small {
+            color: var(--mu)
+        }
+
+        .healthbar {
+            height: 8px;
+            background: #0a1a30;
+            border-radius: 5px;
+            margin-top: 8px;
+            overflow: hidden
+        }
+
+        .healthbar i {
+            display: block;
+            height: 100%;
+            background: var(--cool)
+        }
+
+        .insight-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 8px
+        }
+
+        .insight {
+            border: 1px solid var(--ln);
+            border-radius: 6px;
+            padding: 9px;
+            background: #071a33
+        }
+
+        .insight strong {
+            color: #8cc8ff
+        }
+
+        .status-good {
+            color: var(--cool)
+        }
+
+        .status-warn {
+            color: var(--norm)
+        }
+
+        .status-bad {
+            color: var(--high)
+        }
+
+        #maintenanceNotes {
+            max-height: 220px;
+            overflow: auto
+        }
+
+        .lg {
+            padding: 3px 0;
+            border-bottom: 1px solid #0e2948;
+            font-size: 12px
+        }
+
+        .lg i {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px
+        }
+
+        .note {
+            font-size: 11px;
+            color: var(--mu);
+            margin-top: 6px
+        }
+
+        @media(max-width:1000px) {
+            main {
+                grid-template-columns: 1fr;
+                grid-template-areas: "scene" "side" "tbl" "hotspotPanel" "insights" "ops" "chart" "log"
+            }
+
+            #scene {
+                height: 420px
+            }
+        }
+
+        @media(prefers-reduced-motion:reduce) {
+            #fx {
+                display: none
+            }
+
+            .chip.high,
+            .led.b.on,
+            #fanIc.spin {
+                animation: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="fx"></div>
+    <div id="heatAlert" role="alertdialog" aria-modal="true" aria-labelledby="heatTitle">
+        <div class="heat-card">
+            <h2 id="heatTitle">PROLONGED HIGH HEAT</h2>
+            <p id="heatMessage">A rack has remained above the safe temperature limit.</p>
+            <p>Check cooling and airflow immediately.</p><button id="ackHeat">ACKNOWLEDGE</button>
+        </div>
+    </div>
+    <header>
+        <h1>EcoRack AI<small>Data centre environment monitoring</small></h1><span class="sp"></span>
+        <span class="chip" id="sys">ALL NORMAL</span><span class="chip off" id="bz">BUZZER OFF</span>
+        <button id="snd">Sound alarm: off</button><button id="notify">Browser notifications: off</button><button
+            id="mode">Mode: Simulation</button>
+        <input id="url" value="http://192.168.1.100" aria-label="ESP32 URL" size="20"><span id="lk" class="note"
+            style="margin:0"></span>
+    </header>
+    <main>
+        <section class="pn" id="scene"><canvas id="c"></canvas>
+            <div id="tags"></div>
+            <div id="banner"></div>
+            <div id="hint">Drag to orbit · scroll to zoom · click a rack to select</div>
+        </section>
+        <aside>
+            <div class="pn">
+                <h2 id="selT">Rack 1</h2>
+                <div class="g2">
+                    <div class="thermo"><i id="tf"></i></div>
+                    <div>
+                        <div class="big" id="sT">--</div><b id="sS"></b>
+                    </div>
+                    <div class="ring" id="rg"><b id="sH">--</b></div>
+                </div>
+                <div class="kv" style="align-items:center">Cooling fan<span
+                        style="display:flex;gap:8px;align-items:center"><b id="sF">OFF</b>
+                        <svg id="fanIc" viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
+                            <ellipse cx="12" cy="6" rx="2.6" ry="5" />
+                            <ellipse cx="12" cy="6" rx="2.6" ry="5" transform="rotate(90 12 12)" />
+                            <ellipse cx="12" cy="6" rx="2.6" ry="5" transform="rotate(180 12 12)" />
+                            <ellipse cx="12" cy="6" rx="2.6" ry="5" transform="rotate(270 12 12)" />
+                            <circle cx="12" cy="12" r="2" fill="#071a33" />
+                        </svg></span></div>
+                <div class="kv">IT load<b id="sL"></b></div>
+                <div class="kv">Water required<b id="sQ"></b></div>
+                <div class="kv">Water flowing now<b id="sU"></b></div>
+                <div class="kv">Water wasted<b id="sW"></b></div>
+                <div class="row"><label style="flex:1">Server load <input id="ld" type="range" min="20"
+                            max="100"></label></div>
+                <div class="row"><button id="fault">Cooling fault (demo overheat)</button></div>
+            </div>
+            <div class="pn">
+                <h2>ESP32 hardware mirror (hottest rack)</h2>
+                <div class="oled" id="oled"></div>
+                <div class="leds"><span><i class="led g" id="lg"></i>Green</span><span><i class="led y"
+                            id="ly"></i>Yellow</span><span><i class="led r" id="lr"></i>Red</span><span><i class="led b"
+                            id="lb"></i>Buzzer</span><span><i class="led f" id="lf"></i>Fan</span></div>
+            </div>
+            <div class="pn">
+                <h2>Settings</h2>
+                <div class="row"><button id="smart" class="on">Water: EcoRack smart flow</button></div>
+                <div class="row">Cool threshold <input id="tc" type="number" value="27" step="0.5"> °C</div>
+                <div class="row">High-heat warning threshold <input id="th" type="number" value="33" step="0.5"> °C
+                </div>
+                <div class="row">Trigger after <input id="heatDelay" type="number" min="1" max="3600" value="30">
+                    continuous seconds above threshold</div>
+                <div class="note">Green = cool, yellow = normal, red = high (buzzer + fan + danger screen).</div>
+            </div>
+        </aside>
+        <section class="pn" id="tbl">
+            <h2>Rack status and cooling water</h2>
+            <div class="kpis" id="kpi"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rack</th>
+                        <th>Temp</th>
+                        <th>Humidity</th>
+                        <th>State</th>
+                        <th>Fan</th>
+                        <th>Heat load</th>
+                        <th>Needs L/min</th>
+                        <th>Using L/min</th>
+                        <th>Wasted L/min</th>
+                    </tr>
+                </thead>
+                <tbody id="tb"></tbody>
+            </table>
+            <div class="note">Water figures are model estimates: required flow = heat load ÷ (4.186 × 6 K coolant rise).
+                Conventional = fixed 20 L/min per rack. Add a flow sensor for measured values.</div>
+        </section>
+        <section class="pn" id="hotspotPanel">
+            <h2>Rack heat map · click a rack for details</h2>
+            <div id="hotspots"></div>
+            <div class="note">Color reflects current rack temperature relative to the dashboard thresholds.</div>
+        </section>
+        <section class="pn" id="insights">
+            <h2>Rack health, trend & cooling recommendations</h2>
+            <div id="insightCards" class="insight-grid"></div>
+            <div class="note">Health and trend are dashboard heuristics based on current readings and recent history,
+                not validated predictive models.</div>
+        </section>
+        <section class="pn" id="ops">
+            <h2>Maintenance timeline & daily report</h2>
+            <div class="row"><input id="maintInput" type="text" maxlength="240"
+                    placeholder="Maintenance note (e.g. Rack 2 fan inspected)" style="flex:1;min-width:220px"><button
+                    id="addMaint">Add note</button><button id="exportReport">Export daily report</button></div>
+            <div id="maintenanceNotes"></div>
+            <div id="dailySummary" class="note"></div>
+        </section>
+        <section class="pn" id="chart">
+            <h2>Temperature history (last 2 min, all racks)</h2><canvas id="ch"></canvas>
+        </section>
+        <section class="pn" id="log">
+            <h2>Alarm log</h2>
+            <div class="row" style="margin:0 0 8px"><button id="exportHeat">Export heat events (CSV)</button><button
+                    id="clearHeatLog">Clear event history</button></div>
+            <div class="note">Prolonged-heat start and recovery events are saved in this browser on this device.</div>
+            <div id="heatEventLog"></div>
+            <div id="lgc"></div>
+        </section>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const $ = id => document.getElementById(id), clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+        const N = 8, DT = 6, FIXED = 20, thr = { cool: 27, high: 33 };
+        const COL = { cool: '#22e07a', norm: '#ffc533', high: '#ff3347' }, NAME = { cool: 'COOL', norm: 'NORMAL', high: 'HIGH' };
+        const stOf = T => T >= thr.high ? 'high' : T < thr.cool ? 'cool' : 'norm';
+        const racks = [35, 55, 70, 45, 80, 30, 60, 50].map((l, i) => ({ i, T: 22 + l * .07 + Math.random(), H: 48, load: l, fan: false, fault: false, live: false, hist: [], st: 'cool', P: 0, req: 0, use: 0, waste: 0, uT: 0, cT: 0, highFor: 0, prolongedActive: false, sensorUpdatedAt: 0 }));
+        const S = { mode: 'sim', smart: true, sel: 0, snd: false, live: null, ok: false };
+        function addLog(c, t) { const d = document.createElement('div'); d.className = 'lg'; d.innerHTML = `<i style="background:${c}"></i>${new Date().toLocaleTimeString()} – ${t}`; $('lgc').prepend(d); while ($('lgc').children.length > 40) $('lgc').lastChild.remove() }
+        function physics(dt) {
+            racks.forEach(r => {
+                r.load = clamp(r.load + (Math.random() - .5) * dt * 1.5, 20, 100); r.P = 2 + r.load * .06; r.req = r.P * 60 / (4.186 * DT);
+                let u = S.smart ? clamp(r.req * (r.T >= thr.high ? 1.4 : 1.1), 0, FIXED * 1.5) : FIXED; if (r.fault) u *= .2; r.use = u; r.waste = Math.max(0, u - r.req);
+                if (!r.live) {
+                    const tgt = 21 + r.P * 1.3 + 9 * Math.max(0, 1 - u / r.req) - (r.fan ? 1.5 : 0);
+                    r.T += (tgt - r.T) * (1 - Math.exp(-dt / 20)) + (Math.random() - .5) * .04;
+                    r.H = clamp(r.H + (55 - (r.T - 25) * 1.2 - r.H) * dt * .05 + (Math.random() - .5) * .3, 25, 75);
+                    if (!r.fan && r.T >= thr.high) r.fan = true; else if (r.fan && r.T <= thr.high - 2) r.fan = false
+                }
+                r.uT += u * dt / 60; r.cT += FIXED * dt / 60; if (r.T >= thr.high) r.highFor += dt; else r.highFor = 0
+            })
+        }
+        function evalStates() {
+            racks.forEach(r => {
+                const s = stOf(r.T); if (s === r.st) return;
+                if (s === 'high') addLog(COL.high, `Rack ${r.i + 1} HIGH ${r.T.toFixed(1)}°C – buzzer ringing, fan ON`);
+                else if (r.st === 'high') addLog(COL[s], `Rack ${r.i + 1} back to ${NAME[s]} ${r.T.toFixed(1)}°C`); r.st = s
+            })
+        }
+        // ---- live ESP32
+        let pollT = null, thresholdSyncing = false;
+        async function poll() {
+            try {
+                const base = $('url').value.replace(/\/$/, ''); const d = await (await fetch(base + '/data', { cache: 'no-store' })).json();
+                (d.racks || [{ temperature_c: d.temperature_c, humidity_pct: d.humidity_pct }]).forEach((x, i) => { const r = racks[i]; if (r && x.temperature_c > -100) { r.live = true; r.sensorUpdatedAt = Date.now(); r.T = x.temperature_c; r.H = x.humidity_pct; r.fan = !!d.fan_on } });
+                if (!thresholdSyncing && Number.isFinite(+d.high_from_c) && Number.isFinite(+d.cool_below_c)) { thr.high = +d.high_from_c; thr.cool = +d.cool_below_c; $('th').value = thr.high; $('tc').value = thr.cool }
+                S.live = d; S.ok = true; $('lk').textContent = 'ESP32 connected · threshold ' + (+d.high_from_c).toFixed(1) + ' °C'
+            } catch (e) { S.ok = false; $('lk').textContent = 'ESP32 unreachable (same Wi-Fi; use the ESP32 IP)' }
+        }
+        async function syncThresholds() { if (S.mode !== 'live') return; const base = $('url').value.replace(/\/$/, ''); thresholdSyncing = true; $('lk').textContent = 'Syncing thresholds to ESP32…'; try { const body = new URLSearchParams({ cool_below_c: String(thr.cool), high_from_c: String(thr.high) }); const res = await fetch(base + '/threshold', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }); const d = await res.json(); if (!res.ok || !d.ok) throw new Error(d.error || 'ESP32 rejected threshold'); $('lk').textContent = 'ESP32 connected · thresholds saved' } catch (e) { $('lk').textContent = 'Threshold sync failed: ' + e.message + ' (check Wi-Fi/IP)' } finally { thresholdSyncing = false } }
+        $('mode').onclick = e => {
+            const l = S.mode === 'sim'; S.mode = l ? 'live' : 'sim'; e.target.textContent = 'Mode: ' + (l ? 'ESP32 live' : 'Simulation'); e.target.classList.toggle('on', l); clearInterval(pollT);
+            if (l) { poll(); pollT = setInterval(poll, 2000) } else { $('lk').textContent = ''; S.live = null; racks.forEach(r => r.live = false) }
+        };
+        // ---- sound
+        let ac = null, bt = 0; function beep(force = false) { if ((!S.snd && !force) || !ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = force ? 1050 : 900; g.gain.value = .07; o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + (force ? .32 : .18)) }
+        $('snd').onclick = e => { S.snd = !S.snd; if (S.snd && !ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac && ac.state === 'suspended') ac.resume(); e.target.textContent = 'Sound alarm: ' + (S.snd ? 'on' : 'off'); e.target.classList.toggle('on', S.snd) };
+        $('notify').onclick = async e => { if (!('Notification' in window)) { alert('Browser notifications are not supported here.'); return } if (Notification.permission === 'default') await Notification.requestPermission(); const on = Notification.permission === 'granted'; e.target.textContent = 'Browser notifications: ' + (on ? 'on' : 'off'); e.target.classList.toggle('on', on); if (!on) alert('Notifications were not enabled. You can change this in your browser site settings.'); };
+        const loadHeatEvents = () => { try { return JSON.parse(localStorage.getItem('ecorackHeatEvents') || '[]') } catch { return [] } }; let heatEvents = loadHeatEvents(); function saveHeatEvents() { try { localStorage.setItem('ecorackHeatEvents', JSON.stringify(heatEvents)) } catch (e) { console.warn('Could not save heat event history', e) } } function recordHeatEvent(type, r) { const ev = { timestamp: new Date().toISOString(), event: type, rack: 'Rack ' + (r.i + 1), temperature_c: +r.T.toFixed(1), threshold_c: +(+ $('th').value || 33).toFixed(1), trigger_seconds: Math.max(1, +$('heatDelay').value || 30), duration_seconds: Math.floor(r.highFor) }; heatEvents.unshift(ev); if (heatEvents.length > 5000) heatEvents.length = 5000; saveHeatEvents(); renderHeatEvents(); if (type === 'WARNING TRIGGERED') { if (S.snd) beep(true); if ('Notification' in window && Notification.permission === 'granted') new Notification('EcoRack AI: prolonged high heat', { body: `${ev.rack} at ${ev.temperature_c} °C for ${ev.duration_seconds} seconds` }) } }
+        function renderHeatEvents() { const el = $('heatEventLog'); if (!el) return; el.innerHTML = heatEvents.length ? heatEvents.slice(0, 100).map(x => `<div class="lg"><i style="background:${x.event === 'WARNING TRIGGERED' ? '#ff3347' : '#22e07a'}"></i>${new Date(x.timestamp).toLocaleString()} – ${x.event}: ${x.rack}, ${x.temperature_c} °C (limit ${x.threshold_c} °C), ${x.duration_seconds}s</div>`).join('') : '<div class="note">No prolonged-heat events recorded.</div>' } renderHeatEvents();
+        const getStored = (key) => { try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] } }; let maintenance = getStored('ecorackMaintenance'); function saveMaintenance() { try { localStorage.setItem('ecorackMaintenance', JSON.stringify(maintenance)) } catch (e) { console.warn('Maintenance notes could not be saved', e) } renderMaintenance() } function renderMaintenance() { const el = $('maintenanceNotes'); el.innerHTML = maintenance.length ? maintenance.slice().reverse().map((m, i) => `<div class="lg">${new Date(m.time).toLocaleString()} – ${m.text} <button data-remove-maint="${maintenance.length - 1 - i}" style="float:right;padding:1px 6px" aria-label="Delete note">×</button></div>`).join('') : '<div class="note">No maintenance notes recorded.</div>' } renderMaintenance(); $('addMaint').onclick = () => { const text = $('maintInput').value.trim(); if (!text) return; maintenance.push({ time: new Date().toISOString(), text }); $('maintInput').value = ''; saveMaintenance() }; $('maintInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('addMaint').click() }); $('maintenanceNotes').onclick = e => { const b = e.target.closest('[data-remove-maint]'); if (b) { maintenance.splice(+b.dataset.removeMaint, 1); saveMaintenance() } };
+        function reportText() { const date = new Date().toLocaleDateString(), peak = racks.reduce((a, b) => a.T > b.T ? a : b), today = new Date().toISOString().slice(0, 10), events = heatEvents.filter(e => e.timestamp.slice(0, 10) === today), notes = maintenance.filter(m => m.time.slice(0, 10) === today); return `EcoRack AI — Daily operations summary\nDate: ${date}\n\nDATA MODE: ${S.mode === 'live' ? 'ESP32 live readings (some racks may be simulated)' : 'Simulation demo'}\nPeak current rack: Rack ${peak.i + 1} at ${peak.T.toFixed(1)} °C\nHigh-temperature threshold: ${$('th').value} °C\nProlonged trigger delay: ${$('heatDelay').value} seconds\nCurrent prolonged warnings: ${racks.filter(r => r.prolongedActive).length}\nProlonged warning events today: ${events.filter(e => e.event === 'WARNING TRIGGERED').length} triggered; ${events.filter(e => e.event === 'WARNING CLEARED').length} cleared\nWater use and savings: ${racks.reduce((a, r) => a + r.uT, 0).toFixed(1)} L used since this page session; estimated savings ${racks.reduce((a, r) => a + r.cT - r.uT, 0).toFixed(1)} L vs fixed-flow model (estimate, session only)\n\nRACK SNAPSHOT\n${racks.map(r => `Rack ${r.i + 1}: ${r.T.toFixed(1)} °C, health heuristic ${healthScore(r)} / 100, ${r.live ? (Date.now() - r.sensorUpdatedAt > 10000 ? 'SENSOR STALE' : 'LIVE SENSOR') : 'SIMULATED'}`).join('\n')}\n\nMAINTENANCE NOTES TODAY\n${notes.length ? notes.map(m => `${new Date(m.time).toLocaleTimeString()} — ${m.text}`).join('\n') : 'None recorded'}\n\nCAVEAT: Prototype summary. Estimates are not metered measurements. Local browser event history may not represent a complete or tamper-proof compliance record.` } function healthScore(r) { let score = 100; score -= clamp((r.T - (+ $('th').value || 33)) * 8, 0, 55); if (r.T >= +$('th').value) score -= 18; if (r.T >= +$('th').value && !r.fan) score -= 15; if (r.H > 70 || r.H < 25) score -= 10; if (r.live && Date.now() - r.sensorUpdatedAt > 10000) score -= 35; return Math.round(clamp(score, 0, 100)) } $('exportReport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([reportText()], { type: 'text/plain;charset=utf-8' })); a.download = 'ecorack-daily-report-' + new Date().toISOString().slice(0, 10) + '.txt'; a.click(); URL.revokeObjectURL(a.href) };
+        $('exportHeat').onclick = () => { const cols = ['timestamp', 'event', 'rack', 'temperature_c', 'threshold_c', 'trigger_seconds', 'duration_seconds']; const csv = [cols.join(','), ...heatEvents.slice().reverse().map(x => cols.map(k => '"' + String(x[k] ?? '').replace(/"/g, '""') + '"').join(','))].join('\r\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'ecorack-heat-events-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click(); URL.revokeObjectURL(a.href) }; $('clearHeatLog').onclick = () => { if (confirm('Clear all saved prolonged-heat event history from this browser?')) { heatEvents = []; saveHeatEvents(); renderHeatEvents() } };
+        // ---- controls
+        $('ld').oninput = e => racks[S.sel].load = +e.target.value;
+        $('fault').onclick = () => { const r = racks[S.sel]; r.fault = !r.fault; addLog('#2cc9ff', `Rack ${r.i + 1} cooling fault ${r.fault ? 'injected (water flow cut)' : 'cleared'}`) };
+        $('smart').onclick = e => { S.smart = !S.smart; e.target.classList.toggle('on', S.smart); e.target.textContent = S.smart ? 'Water: EcoRack smart flow' : 'Water: conventional constant flow' };
+        $('tc').onchange = e => { thr.cool = +e.target.value; if (S.mode === 'live') syncThresholds() }; $('th').onchange = e => { thr.high = +e.target.value; if (S.mode === 'live') syncThresholds() };
+        let heatAlertDismissed = false; $('ackHeat').onclick = () => { heatAlertDismissed = true; $('heatAlert').classList.remove('show') };
+        const select = i => { S.sel = i; $('ld').value = racks[i].load }; select(0);
+        $('tb').onclick = e => { const tr = e.target.closest('tr'); if (tr) select(+tr.dataset.i) };
+        // ---- 3D
+        const cv = $('c'), box = $('scene'), R = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); R.setPixelRatio(Math.min(devicePixelRatio, 2));
+        const sc = new THREE.Scene(); sc.background = new THREE.Color(0x050b16); sc.fog = new THREE.Fog(0x050b16, 16, 40);
+        const cam = new THREE.PerspectiveCamera(48, 1, .1, 80); sc.add(new THREE.AmbientLight(0x5a7aa0, .85));
+        const dl = new THREE.DirectionalLight(0xaac8ff, .7); dl.position.set(5, 10, 8); sc.add(dl);
+        const fl = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x08111f, roughness: .9 })); fl.rotation.x = -Math.PI / 2; sc.add(fl);
+        const gr = new THREE.GridHelper(40, 40, 0x1c4a78, 0x10253c); gr.position.y = .01; sc.add(gr);
+        const aisle = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 2.3), new THREE.MeshBasicMaterial({ color: 0x0d3a5c, transparent: true, opacity: .45 })); aisle.rotation.x = -Math.PI / 2; aisle.position.y = .02; sc.add(aisle);
+        const cc = { cool: new THREE.Color(COL.cool), norm: new THREE.Color(COL.norm), high: new THREE.Color(COL.high) }, cWat = new THREE.Color(0x2cc9ff), cOrg = new THREE.Color(0xff9a2c), tmp = new THREE.Color();
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x101b2c, metalness: .6, roughness: .4 }), R3 = [];
+        racks.forEach((r, i) => {
+            const row = i >> 2, x = ((i & 3) - 1.5) * 2.2, z = row ? 2.1 : -2.1, g = new THREE.Group(); g.position.set(x, 0, z); if (row) g.rotation.y = Math.PI; sc.add(g);
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1.7, 3.3, 1.3), bodyMat); b.position.y = 1.65; b.userData.i = i; g.add(b);
+            const sm = new THREE.MeshStandardMaterial({ color: 0x08111f, emissive: 0x22e07a, emissiveIntensity: .6 });
+            for (let j = 0; j < 10; j++) { const s = new THREE.Mesh(new THREE.BoxGeometry(1.45, .2, .05), sm); s.position.set(0, .4 + j * .29, .66); g.add(s) }
+            const bm = new THREE.MeshBasicMaterial({ color: 0x22e07a }), bc = new THREE.Mesh(new THREE.SphereGeometry(.13, 12, 12), bm); bc.position.set(.62, 3.45, .45); g.add(bc);
+            const fg = new THREE.Group(); fg.position.set(0, 3.36, -.1); const ring = new THREE.Mesh(new THREE.TorusGeometry(.5, .05, 8, 28), new THREE.MeshStandardMaterial({ color: 0x5a7a9a, metalness: .8, roughness: .3 })); ring.rotation.x = Math.PI / 2; fg.add(ring);
+            const bl = new THREE.MeshStandardMaterial({ color: 0x2cc9ff, emissive: 0x0a5a78 }); for (let k = 0; k < 5; k++) { const bd = new THREE.Mesh(new THREE.BoxGeometry(.46, .015, .16), bl); bd.position.set(Math.cos(k * 1.2566) * .24, 0, Math.sin(k * 1.2566) * .24); bd.rotation.y = -k * 1.2566; bd.rotation.z = .3; fg.add(bd) } g.add(fg);
+            const pm = new THREE.MeshStandardMaterial({ color: 0x0b2a40, emissive: 0x2cc9ff, emissiveIntensity: .5 }), pp = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, 2.0, 10), pm); pp.rotation.z = Math.PI / 2; pp.position.set(x, .12, row ? 1.15 : -1.15); sc.add(pp);
+            const tg = document.createElement('div'); tg.className = 'tag'; tg.onclick = () => select(i); $('tags').appendChild(tg);
+            R3.push({ g, sm, bm, bc, fg, pm, b, tg, sp: 0 })
+        });
+        const sel = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.25, 40), new THREE.MeshBasicMaterial({ color: 0x2cc9ff, side: THREE.DoubleSide })); sel.rotation.x = -Math.PI / 2; sel.position.y = .04; sc.add(sel);
+        const NP = 320, pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NP * 3), 3)); pg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(NP * 3), 3));
+        sc.add(new THREE.Points(pg, new THREE.PointsMaterial({ size: .13, vertexColors: true, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending })));
+        const pa = pg.attributes.position, pcA = pg.attributes.color;
+        function spw(i, rand) { const g = R3[i % N].g; pa.setXYZ(i, g.position.x + (Math.random() - .5) * 1.4, 3.5 + (rand ? Math.random() * 3.5 : 0), g.position.z + (Math.random() - .5) * .9) }
+        for (let i = 0; i < NP; i++)spw(i, true);
+        let th = .55, ph = 1.1, rad = 13.5, drag = false, lx = 0, ly = 0, dx0 = 0, dy0 = 0, idle = 0;
+        cv.addEventListener('pointerdown', e => { drag = true; lx = dx0 = e.clientX; ly = dy0 = e.clientY; cv.setPointerCapture(e.pointerId) });
+        cv.addEventListener('pointerup', e => {
+            drag = false; if (Math.hypot(e.clientX - dx0, e.clientY - dy0) < 5) {
+                const rc = cv.getBoundingClientRect(), rr = new THREE.Raycaster();
+                rr.setFromCamera(new THREE.Vector2((e.clientX - rc.left) / rc.width * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), cam); const h = rr.intersectObjects(R3.map(o => o.b))[0]; if (h) select(h.object.userData.i)
+            }
+        });
+        cv.addEventListener('pointermove', e => { if (!drag) return; th -= (e.clientX - lx) * .006; ph = clamp(ph - (e.clientY - ly) * .005, .3, 1.5); lx = e.clientX; ly = e.clientY; idle = 0 });
+        cv.addEventListener('wheel', e => { e.preventDefault(); rad = clamp(rad + e.deltaY * .01, 7, 24) }, { passive: false });
+        let W = 1, H = 1; new ResizeObserver(() => { W = box.clientWidth; H = box.clientHeight; R.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix() }).observe(box);
+        // ---- chart
+        function drawChart() {
+            const c = $('ch'), d = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; c.width = w * d; c.height = h * d; const g = c.getContext('2d'); g.scale(d, d);
+            const y = t => h - 16 - (clamp(t, 18, 42) - 18) / 24 * (h - 26), X = (k, n) => 34 + (k + 120 - n) / 119 * (w - 44); g.font = '11px sans-serif'; g.lineWidth = 1;
+            for (let t = 20; t <= 40; t += 5) { g.strokeStyle = '#12304f'; g.beginPath(); g.moveTo(34, y(t)); g.lineTo(w - 6, y(t)); g.stroke(); g.fillStyle = '#7fa0c4'; g.fillText(t + '°', 4, y(t) + 4) }
+            g.setLineDash([5, 4]);[[thr.cool, COL.cool], [thr.high, COL.high]].forEach(([t, c]) => { g.strokeStyle = c; g.beginPath(); g.moveTo(34, y(t)); g.lineTo(w - 6, y(t)); g.stroke() }); g.setLineDash([]);
+            [...racks.filter(r => r.i !== S.sel), racks[S.sel]].forEach(r => { const s = r.i === S.sel; g.strokeStyle = s ? COL[r.st] : 'rgba(110,170,230,.35)'; g.lineWidth = s ? 2.6 : 1; g.beginPath(); r.hist.forEach((t, k) => k ? g.lineTo(X(k, r.hist.length), y(t)) : g.moveTo(X(k, r.hist.length), y(t))); g.stroke() })
+        }
+        function renderTable() {
+            let q = 0, u = 0, w = 0, uT = 0, cT = 0;
+            $('tb').innerHTML = racks.map(r => {
+                q += r.req; u += r.use; w += r.waste; uT += r.uT; cT += r.cT; const c = COL[r.st];
+                return `<tr data-i="${r.i}" class="${r.i === S.sel ? 'sel' : ''}"><td>Rack ${r.i + 1}${r.live ? ' <em>LIVE</em>' : ''}</td><td style="color:${c}"><b>${r.T.toFixed(1)}°C</b></td><td>${r.H.toFixed(0)}%</td><td style="color:${c}"><b>${NAME[r.st]}</b></td><td>${r.fan ? '<b class="on">ON</b>' : 'off'}</td><td>${r.P.toFixed(1)} kW</td><td>${r.req.toFixed(1)}</td><td>${r.use.toFixed(1)}</td><td><span class="bar"><i style="width:${clamp(r.waste / FIXED * 100, 0, 100)}%"></i></span>${r.waste.toFixed(1)}</td></tr>`
+            }).join('');
+            const sv = cT - uT; $('kpi').innerHTML = [['Water needed now', q.toFixed(0) + ' L/min'], ['Water flowing now', u.toFixed(0) + ' L/min'], ['Wasted right now', w.toFixed(0) + ' L/min'], ['Used this session', uT.toFixed(0) + ' L'], ['Saved vs constant flow', sv.toFixed(0) + ' L (' + (cT ? sv / cT * 100 : 0).toFixed(0) + '%)']].map(([a, b]) => `<div class="kpi">${a}<b>${b}</b></div>`).join('')
+        }
+        function renderHotspots() { const root = $('hotspots'); root.innerHTML = racks.map(r => { const score = healthScore(r), fresh = r.live ? (Date.now() - r.sensorUpdatedAt > 10000 ? 'STALE SENSOR' : 'LIVE SENSOR') : 'SIMULATED', bg = r.st === 'high' ? '#54111b' : r.st === 'norm' ? '#4b3a0b' : '#0a3928'; return `<div class="hot-card" data-rack="${r.i}" style="background:${bg}"><small>RACK ${r.i + 1} · ${fresh}</small><b>${r.T.toFixed(1)} °C</b><small>${r.st.toUpperCase()} · Health ${score}/100</small><div class="healthbar"><i style="width:${score}%;background:${score < 40 ? 'var(--high)' : score < 70 ? 'var(--norm)' : 'var(--cool)'}"></i></div></div>` }).join('') } function renderInsights() { const root = $('insightCards'); root.innerHTML = racks.map(r => { const hist = r.hist.slice(-12), slope = hist.length >= 6 ? (hist[hist.length - 1] - hist[0]) / ((hist.length - 1) / 60) : 0, eta = slope > 0.03 ? Math.max(0, (+$('th').value - r.T) / slope) : null, stale = r.live && Date.now() - r.sensorUpdatedAt > 10000; let advice = []; if (stale) advice.push('Sensor reading is stale; check ESP32 connection, sensor wiring and power.'); if (r.T >= +$('th').value && !r.fan) advice.push('High heat with fan off: inspect fan power, control wiring and airflow.'); if (r.T >= +$('th').value && r.fan) advice.push('High heat persists with fan on: check blocked intake/exhaust and cooling-water flow.'); if (r.H > 70 || r.H < 25) advice.push('Humidity is outside the demo comfort band; verify sensor and room conditions.'); if (r.fault) advice.push('Cooling fault is active in the dashboard simulation.'); if (!advice.length) advice.push('No immediate rule-based action; continue monitoring temperature and sensor freshness.'); const trend = eta !== null ? `Rising ~${slope.toFixed(1)} °C/min; could reach threshold in ~${Math.ceil(eta)} min if this short trend continues.` : slope < -.03 ? `Cooling trend ~${Math.abs(slope).toFixed(1)} °C/min.` : 'No clear rising trend from recent samples.'; return `<div class="insight"><strong>Rack ${r.i + 1} · Health ${healthScore(r)}/100</strong><div class="note">${trend}</div><div class="note ${stale ? 'status-bad' : r.st === 'high' ? 'status-warn' : 'status-good'}">${r.live ? (stale ? 'SENSOR STALE' : 'Sensor fresh') : 'Simulated data'}</div><ul>${advice.map(a => `<li>${a}</li>`).join('')}</ul></div>` }).join(''); $('dailySummary').textContent = `Today: ${heatEvents.filter(e => e.timestamp.slice(0, 10) === new Date().toISOString().slice(0, 10) && e.event === 'WARNING TRIGGERED').length} prolonged-heat warning(s) triggered. Report includes current snapshot and session-only model estimates.` } function renderOperations() { renderHotspots(); renderInsights() } $('hotspots').onclick = e => { const c = e.target.closest('[data-rack]'); if (c) select(+c.dataset.rack) };
+        function hud(now) {
+            const r = racks[S.sel], c = COL[r.st], hot = racks.reduce((a, b) => b.T > a.T ? b : a), any = racks.some(x => x.st === 'high'), ring = any || (S.live && S.live.buzzer_on);
+            $('selT').textContent = `Rack ${r.i + 1} – ${r.live ? 'live ESP32 sensor' : 'simulated'}`; $('sT').textContent = r.T.toFixed(1) + '°C'; $('sT').style.color = c; $('sS').textContent = NAME[r.st]; $('sS').style.color = c;
+            $('tf').style.height = clamp((r.T - 15) / 30 * 100, 3, 100) + '%'; $('tf').style.background = c; $('rg').style.setProperty('--p', r.H); $('sH').textContent = r.H.toFixed(0) + '%';
+            $('sF').textContent = r.fan ? 'ON' : 'OFF'; $('sF').style.color = r.fan ? 'var(--wat)' : ''; $('fanIc').classList.toggle('spin', r.fan);
+            $('sL').textContent = r.P.toFixed(1) + ' kW (' + r.load.toFixed(0) + '%)'; $('sQ').textContent = r.req.toFixed(1) + ' L/min'; $('sU').textContent = r.use.toFixed(1) + ' L/min'; $('sW').textContent = r.waste.toFixed(1) + ' L/min'; $('sW').style.color = r.waste > r.req * .3 ? '#ff9a2c' : '';
+            $('fault').classList.toggle('on', r.fault);
+            const delay = Math.max(1, +$('heatDelay').value || 30); racks.forEach(x => { const nowProlonged = x.highFor >= delay; if (nowProlonged && !x.prolongedActive) recordHeatEvent('WARNING TRIGGERED', x); else if (!nowProlonged && x.prolongedActive) recordHeatEvent('WARNING CLEARED', x); x.prolongedActive = nowProlonged }); const prolonged = racks.filter(x => x.prolongedActive); const heatAlert = $('heatAlert'); if (!prolonged.length) { heatAlertDismissed = false; heatAlert.classList.remove('show') } else if (!heatAlertDismissed) { heatAlert.classList.add('show'); $('heatMessage').innerHTML = prolonged.map(x => `<strong>Rack ${x.i + 1}</strong>: ${x.T.toFixed(1)} °C for ${Math.floor(x.highFor)} seconds`).join('<br>') }
+            const hs = hot.st; $('lg').classList.toggle('on', hs === 'cool'); $('ly').classList.toggle('on', hs === 'norm'); $('lr').classList.toggle('on', hs === 'high'); $('lb').classList.toggle('on', ring); $('lf').classList.toggle('on', racks.some(x => x.fan));
+            $('oled').innerHTML = `RACK ${hot.i + 1}  ${hot.T.toFixed(1)}C<br>HUM ${hot.H.toFixed(0)}%  ${NAME[hs]}<br>FAN:${hot.fan ? 'ON ' : 'OFF'} BUZ:${ring ? 'ON' : 'OFF'}`;
+            const sy = $('sys'); sy.textContent = any ? 'DANGER – HIGH TEMPERATURE' : 'ALL NORMAL'; sy.classList.toggle('high', any); const bz = $('bz'); bz.textContent = ring ? 'BUZZER RINGING' : 'BUZZER OFF'; bz.className = 'chip ' + (ring ? 'high' : 'off');
+            document.body.classList.toggle('danger', any); const bn = $('banner'); bn.style.display = any ? 'block' : 'none';
+            if (any) bn.textContent = 'DANGER – ' + racks.filter(x => x.st === 'high').map(x => 'Rack ' + (x.i + 1)).join(', ') + ' overheating · buzzer ON · fan ON';
+            $('fx').style.opacity = any ? .3 + .3 * Math.sin(now / 130) : 0
+        }
+        // ---- loop
+        let last = performance.now(), a1 = 0, a2 = 0, a3 = 0; const v = new THREE.Vector3();
+        function tick(now) {
+            const dt = Math.min((now - last) / 1000, .1); last = now; idle += dt; physics(dt); evalStates();
+            racks.forEach((r, i) => {
+                const o = R3[i], c = cc[r.st], pulse = r.st === 'high' ? .5 + .5 * Math.sin(now / 110) : 1;
+                o.sm.emissive.copy(c); o.sm.emissiveIntensity = r.st === 'high' ? .5 + .7 * pulse : .55; o.bm.color.copy(c); o.bc.scale.setScalar(r.st === 'high' ? 1 + .5 * pulse : 1);
+                o.sp += ((r.fan ? 20 : 0) - o.sp) * Math.min(1, dt * 3); o.fg.rotation.y += o.sp * dt;
+                o.pm.emissiveIntensity = .2 + .8 * clamp(r.use / (FIXED * 1.5), 0, 1); o.pm.emissive.copy(cWat).lerp(cOrg, clamp(r.use ? r.waste / r.use * 1.5 : 0, 0, 1));
+                v.set(o.g.position.x, 4.2, o.g.position.z).project(cam); o.tg.style.left = (v.x * .5 + .5) * W + 'px'; o.tg.style.top = (-v.y * .5 + .5) * H + 'px'; o.tg.style.display = v.z < 1 ? 'block' : 'none';
+                o.tg.style.color = COL[r.st]; o.tg.style.borderColor = COL[r.st]; o.tg.textContent = `R${i + 1} ${r.T.toFixed(1)}°${r.fan ? ' ⟳' : ''}`
+            });
+            for (let i = 0; i < NP; i++) { const r = racks[i % N]; let y = pa.getY(i) + (.4 + Math.max(0, r.T - 22) * .08 + (r.fan ? 1.4 : 0)) * dt; if (y > 7) { spw(i, false); y = pa.getY(i) } pa.setY(i, y); const m = r.st === 'cool' ? .45 : 1, c = cc[r.st]; pcA.setXYZ(i, c.r * m, c.g * m, c.b * m) }
+            pa.needsUpdate = pcA.needsUpdate = true; sel.position.x = R3[S.sel].g.position.x; sel.position.z = R3[S.sel].g.position.z;
+            if (!drag && idle > 4) th += dt * .07; cam.position.set(Math.sin(th) * Math.sin(ph) * rad, Math.cos(ph) * rad, Math.cos(th) * Math.sin(ph) * rad); cam.lookAt(0, 1.6, 0); R.render(sc, cam);
+            a1 += dt; if (a1 >= 1) { a1 = 0; racks.forEach(r => { r.hist.push(r.T); if (r.hist.length > 120) r.hist.shift() }); drawChart(); renderOperations() }
+            a2 += dt; if (a2 >= .5) { a2 = 0; renderTable() }
+            a3 += dt; if (a3 >= .6) { a3 = 0; if (racks.some(x => x.prolongedActive)) { if (S.snd) beep(true) } else if (racks.some(x => x.st === 'high') || (S.live && S.live.buzzer_on)) beep() }
+            hud(now); requestAnimationFrame(tick)
+        }
+        for (let k = 0; k < 60; k++) { physics(1); evalStates(); racks.forEach(r => { r.hist.push(r.T) }) }
+        racks.forEach(r => { r.uT = 0; r.cT = 0; r.highFor = 0; r.prolongedActive = false }); $('lgc').innerHTML = ''; addLog('#22e07a', 'Control room started – ' + N + ' racks monitored');
+        requestAnimationFrame(tick);
+    </script>
+</body>
+
+</html>
